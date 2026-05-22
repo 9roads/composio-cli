@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach, vi } from 'vitest';
+import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,6 +32,10 @@ const toolListResponse = (slug = 'GMAIL_SEND_EMAIL', inputSchema: Record<string,
 });
 
 describe('commands', () => {
+  beforeEach(() => {
+    vi.stubEnv('CI', 'false');
+  });
+
   afterEach(() => {
     setLocalToolsProviderForTests(null);
     vi.unstubAllEnvs();
