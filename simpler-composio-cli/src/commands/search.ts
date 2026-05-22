@@ -3,7 +3,7 @@ import { CliConfig, Env, readConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { apiRequest } from '../http.js';
 import { CliIO, writeLine } from '../io.js';
-import { getOrFetchToolInputDefinition, resolveCacheDir } from '../schema-cache.js';
+import { cacheToolInputDefinition, resolveCacheDir, ToolInputDefinition } from '../schema-cache.js';
 import {
   appendCliSessionHistory,
   buildMinimalPayloadFromSchema,
@@ -20,11 +20,13 @@ type SearchOptions = {
 };
 
 type SearchToolSchema = {
-  tool_slug: string;
-  toolkit: string;
+  tool_slug?: string;
+  toolkit?: string;
   description?: string;
   input_schema?: Record<string, unknown>;
   output_schema?: Record<string, unknown>;
+  version?: string;
+  no_auth?: boolean;
 };
 
 type SearchResultRecord = {
@@ -156,7 +158,8 @@ const collectLimitedSlugs = (
     if (seen.has(slug) || all.length >= limit) return;
     const schema = toolSchemas[slug];
     if (!schema) return;
-    if (toolkitSet && !toolkitSet.has(schema.toolkit.toLowerCase())) return;
+    const toolkit = schema.toolkit?.toLowerCase();
+    if (toolkitSet && (!toolkit || !toolkitSet.has(toolkit))) return;
     seen.add(slug);
     all.push(slug);
     target.push(slug);
@@ -226,10 +229,29 @@ const firstSearchToolSlug = (response: SearchResponseRecord): string | undefined
 const responseHasTools = (response: SearchResponseRecord): boolean =>
   response.results.some(result => result.primary_tool_slugs.length > 0 || result.related_tool_slugs.length > 0);
 
+const cacheSearchToolSchemas = async (
+  env: Env,
+  toolSchemas: Record<string, SearchToolSchema>
+): Promise<Record<string, ToolInputDefinition>> =>
+  Object.fromEntries(
+    await Promise.all(
+      Object.entries(toolSchemas).map(async ([key, schema]) => {
+        const definition = await cacheToolInputDefinition(env, {
+          slug: key,
+          toolkit: schema.toolkit,
+          version: schema.version ?? null,
+          schema: schema.input_schema ?? {},
+          noAuth: schema.no_auth,
+        });
+        return [key, definition] as const;
+      })
+    )
+  );
+
 const buildSearchJsonPayload = async (params: {
-  config: CliConfig;
   env: Env;
   response: SearchResponseRecord;
+  cachedDefinitions: Record<string, ToolInputDefinition>;
   sessionId: string;
 }): Promise<SearchJsonPayload> => {
   const cacheDir = resolveCacheDir(params.env);
@@ -237,18 +259,13 @@ const buildSearchJsonPayload = async (params: {
     new Set(params.response.results.flatMap(result => result.primary_tool_slugs))
   );
   const primaryToolSchemaPaths = Object.fromEntries(
-    await Promise.all(
-      primaryToolSlugs.map(async slug => {
-        const definition = await getOrFetchToolInputDefinition(
-          params.config,
-          params.env,
-          params.sessionId,
-          slug,
-          { refresh: true }
-        );
-        return [slug, toHomeRelativePath(cacheDir, definition.schemaPath)] as const;
-      })
-    )
+    primaryToolSlugs.map(slug => {
+      const definition = params.cachedDefinitions[slug];
+      const schemaPath = definition
+        ? toHomeRelativePath(cacheDir, definition.schemaPath)
+        : TOOL_SCHEMA_PATH_FORMAT.replace('<TOOL_SLUG>', slug);
+      return [slug, schemaPath] as const;
+    })
   );
   const connectedToolkits = Array.from(
     new Set(
@@ -302,8 +319,8 @@ const toToolTableItems = (
     if (!schema) return [];
     return [
       {
-        slug: schema.tool_slug,
-        name: schema.tool_slug,
+        slug: schema.tool_slug ?? slug,
+        name: schema.tool_slug ?? slug,
         description: schema.description ?? '',
         tags: [],
       },
@@ -387,6 +404,7 @@ export const runSearch = async (args: string[], io: CliIO, env: Env): Promise<vo
   const sessionId = requireSessionId(options.sessionId);
   const config = readConfig(env);
   const response = await performSearch(config, sessionId, options);
+  const cachedDefinitions = await cacheSearchToolSchemas(env, response.tool_schemas);
   const resultCount = response.results.reduce(
     (sum, result) => sum + result.primary_tool_slugs.length + result.related_tool_slugs.length,
     0
@@ -416,6 +434,6 @@ export const runSearch = async (args: string[], io: CliIO, env: Env): Promise<vo
     return;
   }
 
-  const output = await buildSearchJsonPayload({ config, env, response, sessionId });
+  const output = await buildSearchJsonPayload({ env, response, cachedDefinitions, sessionId });
   writeLine(io.stdout, JSON.stringify(output, null, 2));
 };

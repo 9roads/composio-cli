@@ -89,6 +89,24 @@ const writeDefinition = async (
   return { ...definition, schemaPath };
 };
 
+export const cacheToolInputDefinition = async (
+  env: Env,
+  definition: {
+    slug: string;
+    toolkit?: string;
+    version?: string | null;
+    schema: Record<string, unknown>;
+    noAuth?: boolean;
+  }
+): Promise<ToolInputDefinition> =>
+  writeDefinition(env, definition.slug, {
+    slug: definition.slug,
+    toolkit: definition.toolkit,
+    version: definition.version ?? null,
+    schema: normalizeObjectSchema(definition.schema),
+    noAuth: definition.noAuth,
+  });
+
 export const getCachedToolInputDefinition = async (
   env: Env,
   slug: string

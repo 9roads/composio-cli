@@ -390,23 +390,21 @@ const executeSingle = async (params: {
   const local = await isLocalToolSlug(params.slug);
   const meta = isMetaToolSlug(params.slug);
   const shouldValidate = !params.skipToolParamsCheck && !params.skipChecks;
-  const mustFetchDefinition = params.getSchema || Boolean(params.file) || (params.dryRun && shouldValidate);
+  const needsDefinition = params.getSchema || Boolean(params.file) || (params.dryRun && shouldValidate);
   const shouldValidateWithSchema = shouldValidate && !local && !meta;
   const shouldTryFetchDefinition =
     !params.dryRun && !local && !meta && argumentsContainUploadSource(params.args);
   const schemaMode: 'refresh' | 'fetch-if-missing' | 'cached' | 'none' =
-    mustFetchDefinition || shouldTryFetchDefinition
-      ? 'refresh'
-      : shouldValidateWithSchema
-        ? 'refresh'
-        : !params.dryRun && !local && !meta
-          ? 'cached'
-          : 'none';
+    needsDefinition || shouldTryFetchDefinition || shouldValidateWithSchema
+      ? 'fetch-if-missing'
+      : !params.dryRun && !local && !meta
+        ? 'cached'
+        : 'none';
 
   const definition = await getDefinitionIfNeeded({
     config: params.config,
     env: params.env,
-    allowFetchFailure: shouldTryFetchDefinition && !mustFetchDefinition,
+    allowFetchFailure: !needsDefinition && (shouldTryFetchDefinition || shouldValidateWithSchema),
     sessionId: params.sessionId,
     slug: params.slug,
     mode: schemaMode,

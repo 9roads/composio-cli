@@ -17,7 +17,7 @@ export const executeHelp = (): string =>
     '  -d, --data <text>         JSON or JS-style object arguments, e.g. -d \'{ repo: "foo" }\', @file, or - for stdin',
     '  -p, --parallel            Execute repeated TOOL_SLUG -d <text> groups concurrently',
     '  --file <path>             Inject a local file path into the single file_uploadable input',
-    '  --get-schema              Fetch and print the CLI-facing input schema without executing',
+    '  --get-schema              Print the CLI-facing input schema without executing',
     '  --dry-run                 Validate and preview the tool call without executing',
     '  --account <text>          Connected account selector inside the provided session',
     '',
@@ -51,4 +51,3 @@ export const executeHelp = (): string =>
     'SEE ALSO',
     '  composio search "<query>" --session-id trs_...    Find tool slugs by use case',
   ].join('\n');
-

@@ -100,9 +100,6 @@ describe('commands', () => {
           error: null,
         });
       }
-      if (url.includes('/tools')) {
-        return jsonResponse(toolListResponse('GMAIL_SEND_EMAIL', schema));
-      }
       throw new Error(`unexpected fetch: ${url}`);
     });
 
@@ -113,7 +110,7 @@ describe('commands', () => {
     );
 
     expect(code).toBe(0);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const output = JSON.parse(io.stdoutText());
     expect(output).toMatchObject({
       results: [
@@ -137,6 +134,10 @@ describe('commands', () => {
     expect(output.next_steps.steps[0].command).toBe(
       'composio execute GMAIL_SEND_EMAIL --session-id trs_123 -d \'{"recipient_email":""}\''
     );
+    const cached = JSON.parse(
+      await readFile(path.join(home, '.composio', 'tool_definitions', 'GMAIL_SEND_EMAIL.json'), 'utf8')
+    );
+    expect(cached.inputSchema).toEqual(schema);
   });
 
   it('search --human uses the original table shape with session-scoped next steps', async () => {
@@ -210,6 +211,50 @@ describe('commands', () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       tool_slug: 'GMAIL_SEND_EMAIL',
       arguments: { recipient_email: 'a@b.com' },
+    });
+  });
+
+  it('execute continues to the backend when schema preflight cannot find the tool in /tools', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'simpler-cli-'));
+    const io = createTestIO();
+    const fetchMock = mockFetch((input, init) => {
+      const url = String(input);
+      if (url.includes('/tools')) {
+        return jsonResponse({
+          items: [{ slug: 'COMPOSIO_SEARCH_TOOLS', toolkit: { slug: 'composio' }, input_parameters: {} }],
+          next_cursor: null,
+        });
+      }
+      if (url.endsWith('/execute')) {
+        return jsonResponse({ data: null, error: 'Input validation failed', log_id: 'log_1' });
+      }
+      throw new Error(`unexpected fetch: ${url} ${String(init?.body ?? '')}`);
+    });
+
+    const code = await runCli(
+      [
+        'execute',
+        'SLACKBOT_ADD_REACTION_TO_AN_ITEM',
+        '--session-id',
+        'trs_123',
+        '--skip-connection-check',
+        '-d',
+        '{}',
+      ],
+      io,
+      baseEnv(home)
+    );
+
+    expect(code).toBe(1);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://backend.test/api/v3.1/tool_router/session/trs_123/tools?limit=500',
+      'https://backend.test/api/v3.1/tool_router/session/trs_123/execute',
+    ]);
+    expect(JSON.parse(io.stdoutText())).toEqual({
+      successful: false,
+      data: null,
+      error: 'Input validation failed',
+      logId: 'log_1',
     });
   });
 
@@ -550,16 +595,18 @@ describe('commands', () => {
     expect(code).toBe(0);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
-    expect(bodies).toEqual([
-      {
-        tool_slug: 'GMAIL_SEND_EMAIL',
-        arguments: { recipient_email: 'a@b.com' },
-      },
-      {
-        tool_slug: 'GITHUB_CREATE_AN_ISSUE',
-        arguments: { owner: 'acme', repo: 'app', title: 'Bug' },
-      },
-    ]);
+    expect(bodies).toEqual(
+      expect.arrayContaining([
+        {
+          tool_slug: 'GMAIL_SEND_EMAIL',
+          arguments: { recipient_email: 'a@b.com' },
+        },
+        {
+          tool_slug: 'GITHUB_CREATE_AN_ISSUE',
+          arguments: { owner: 'acme', repo: 'app', title: 'Bug' },
+        },
+      ])
+    );
   });
 
   it('execute --parallel applies account selectors with original positional behavior', async () => {
@@ -723,103 +770,140 @@ describe('commands', () => {
     expect(output.inputSchema.properties.attachment.format).toBe('path');
   });
 
-  it('execute --get-schema refreshes cached schemas instead of returning stale schema', async () => {
+  it('execute --get-schema uses schemas cached from search when /tools does not list the slug', async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'simpler-cli-'));
-    const fetchMock = mockFetch(() =>
-      jsonResponse(
-        toolListResponse('GMAIL_SEND_EMAIL', {
-          type: 'object',
-          properties: { old_field: { type: 'string' } },
-        })
-      )
-    );
+    const schema = {
+      type: 'object',
+      properties: { channel: { type: 'string' }, timestamp: { type: 'string' }, name: { type: 'string' } },
+      required: ['channel', 'timestamp', 'name'],
+    };
+    const fetchMock = mockFetch(input => {
+      const url = String(input);
+      if (url.includes('/search')) {
+        return jsonResponse({
+          results: [
+            {
+              use_case: 'add slackbot reaction',
+              primary_tool_slugs: ['SLACKBOT_ADD_REACTION_TO_AN_ITEM'],
+              related_tool_slugs: [],
+              recommended_plan_steps: [],
+            },
+          ],
+          toolkit_connection_statuses: [{ toolkit: 'slackbot', has_active_connection: true }],
+          tool_schemas: {
+            SLACKBOT_ADD_REACTION_TO_AN_ITEM: {
+              tool_slug: 'SLACKBOT_ADD_REACTION_TO_AN_ITEM',
+              toolkit: 'slackbot',
+              description: 'Add a reaction',
+              input_schema: schema,
+            },
+          },
+          next_steps_guidance: [],
+          error: null,
+        });
+      }
+      if (url.includes('/tools')) {
+        return jsonResponse({
+          items: [{ slug: 'COMPOSIO_SEARCH_TOOLS', toolkit: { slug: 'composio' }, input_parameters: {} }],
+          next_cursor: null,
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
 
-    const firstCode = await runCli(
-      ['execute', 'GMAIL_SEND_EMAIL', '--session-id', 'trs_123', '--get-schema'],
+    const searchCode = await runCli(
+      ['search', 'add slackbot reaction', '--session-id', 'trs_123', '--human'],
       createTestIO(),
       baseEnv(home)
     );
-    expect(firstCode).toBe(0);
-
-    fetchMock.mockImplementation(() =>
-      jsonResponse(
-        toolListResponse('GMAIL_SEND_EMAIL', {
-          type: 'object',
-          properties: { new_field: { type: 'string' } },
-        })
-      )
-    );
+    expect(searchCode).toBe(0);
 
     const io = createTestIO();
-    const secondCode = await runCli(
-      ['execute', 'GMAIL_SEND_EMAIL', '--session-id', 'trs_123', '--get-schema'],
+    const code = await runCli(
+      ['execute', 'SLACKBOT_ADD_REACTION_TO_AN_ITEM', '--session-id', 'trs_123', '--get-schema'],
       io,
       baseEnv(home)
     );
 
-    expect(secondCode).toBe(0);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(code).toBe(0);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/tools'))).toHaveLength(0);
     const output = JSON.parse(io.stdoutText());
-    expect(output.inputSchema.properties).toEqual({ new_field: { type: 'string' } });
+    expect(output.inputSchema).toEqual(schema);
   });
 
-  it('execute refreshes cached schemas before normal validation', async () => {
+  it('execute uses schemas cached from human search instead of requiring /tools to contain the slug', async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'simpler-cli-'));
-    const fetchMock = mockFetch(() =>
-      jsonResponse(
-        toolListResponse('GMAIL_SEND_EMAIL', {
-          type: 'object',
-          properties: { old_field: { type: 'string' } },
-        })
-      )
-    );
-
-    const schemaCode = await runCli(
-      ['execute', 'GMAIL_SEND_EMAIL', '--session-id', 'trs_123', '--get-schema'],
-      createTestIO(),
-      baseEnv(home)
-    );
-    expect(schemaCode).toBe(0);
-
-    fetchMock.mockImplementation(input => {
+    const schema = {
+      type: 'object',
+      properties: { channel: { type: 'string' }, timestamp: { type: 'string' }, name: { type: 'string' } },
+      required: ['channel', 'timestamp', 'name'],
+    };
+    const fetchMock = mockFetch((input, init) => {
       const url = String(input);
-      if (url.includes('/tools')) {
-        return jsonResponse(
-          toolListResponse('GMAIL_SEND_EMAIL', {
-            type: 'object',
-            properties: { new_field: { type: 'string' } },
-            required: ['new_field'],
-          })
-        );
+      if (url.includes('/search')) {
+        return jsonResponse({
+          results: [
+            {
+              use_case: 'add slackbot reaction',
+              primary_tool_slugs: ['SLACKBOT_ADD_REACTION_TO_AN_ITEM'],
+              related_tool_slugs: [],
+              recommended_plan_steps: [],
+            },
+          ],
+          toolkit_connection_statuses: [{ toolkit: 'slackbot', has_active_connection: true }],
+          tool_schemas: {
+            SLACKBOT_ADD_REACTION_TO_AN_ITEM: {
+              tool_slug: 'SLACKBOT_ADD_REACTION_TO_AN_ITEM',
+              toolkit: 'slackbot',
+              description: 'Add a reaction',
+              input_schema: schema,
+            },
+          },
+          next_steps_guidance: [],
+          error: null,
+        });
       }
       if (url.endsWith('/execute')) {
         return jsonResponse({ data: { ok: true }, error: null, log_id: 'log_1' });
       }
-      throw new Error(`unexpected fetch: ${url}`);
+      throw new Error(`unexpected fetch: ${url} ${String(init?.body ?? '')}`);
     });
+
+    const searchCode = await runCli(
+      ['search', 'add slackbot reaction', '--session-id', 'trs_123', '--human'],
+      createTestIO(),
+      baseEnv(home)
+    );
+    expect(searchCode).toBe(0);
 
     const io = createTestIO();
     const code = await runCli(
       [
         'execute',
-        'GMAIL_SEND_EMAIL',
+        'SLACKBOT_ADD_REACTION_TO_AN_ITEM',
         '--session-id',
         'trs_123',
         '--skip-connection-check',
         '-d',
-        '{ new_field: "ok" }',
+        '{ channel: "C123", timestamp: "1710000000.000000", name: "thumbsup" }',
       ],
       io,
       baseEnv(home)
     );
 
     expect(code).toBe(0);
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/tools'))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/tools'))).toHaveLength(0);
     expect(JSON.parse(io.stdoutText())).toEqual({
       successful: true,
       data: { ok: true },
       error: null,
       logId: 'log_1',
+    });
+    const executeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/execute'));
+    expect(executeCall).toBeDefined();
+    expect(JSON.parse(String(executeCall?.[1]?.body))).toEqual({
+      tool_slug: 'SLACKBOT_ADD_REACTION_TO_AN_ITEM',
+      arguments: { channel: 'C123', timestamp: '1710000000.000000', name: 'thumbsup' },
     });
   });
 
