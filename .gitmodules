@@ -1,0 +1,4 @@
+[submodule "composio"]
+	path = composio
+	url = git@github.com:ComposioHQ/composio.git
+	branch = next

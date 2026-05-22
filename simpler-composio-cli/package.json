@@ -1,0 +1,53 @@
+{
+  "name": "loisa-composio-cli",
+  "version": "0.1.0",
+  "description": "Small Composio CLI for existing Tool Router sessions.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/9roads/composio-cli.git",
+    "directory": "simpler-composio-cli"
+  },
+  "type": "module",
+  "bin": {
+    "composio": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "composio",
+    "cli",
+    "tool-router"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/local-tools-provider/local-tools-binaries','dist/local-tools-binaries',{recursive:true,force:true})\"",
+    "cli": "tsx src/cli.ts",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "test:update": "vitest run -u",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@composio/json-schema-to-zod": "^0.1.20",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "comment-json": "^5.0.0",
+    "decompress": "^4.2.1",
+    "js-tiktoken": "^1.0.21",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@types/decompress": "^4.2.7",
+    "@types/node": "^24.0.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.1.4"
+  }
+}

@@ -1,0 +1,148 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`help output > matches execute help snapshot 1`] = `
+"USAGE
+  composio execute <slug> --session-id <session_id> [-d, --data text] [--file path] [--dry-run] [--get-schema]
+  composio execute --parallel --session-id <session_id> <slug> -d <text> <slug> -d <text> ...
+
+DESCRIPTION
+  Execute a tool by slug.
+  Validates inputs against cached schemas and checks the session connection automatically; just try it and it will tell you what to fix.
+  Sessions are created by your app/backend; this CLI only operates on an existing Tool Router session.
+
+ARGUMENTS
+  <slug>                    Tool slug for single execute, or repeated TOOL_SLUG -d <text> groups when using -p/--parallel
+
+OPTIONS
+  --session-id <session_id> Existing Tool Router session id.
+  -d, --data <text>         JSON or JS-style object arguments, e.g. -d '{ repo: "foo" }', @file, or - for stdin
+  -p, --parallel            Execute repeated TOOL_SLUG -d <text> groups concurrently
+  --file <path>             Inject a local file path into the single file_uploadable input
+  --get-schema              Fetch and print the CLI-facing input schema without executing
+  --dry-run                 Validate and preview the tool call without executing
+  --account <text>          Connected account selector inside the provided session
+
+FLAGS
+  --skip-connection-check   Skip the connected-account check
+  --skip-tool-params-check  Skip input validation against cached schema
+  --skip-checks             Skip both checks above
+
+EXAMPLES
+  # Send an email
+  composio execute GMAIL_SEND_EMAIL --session-id trs_... -d '{ recipient_email: "a@b.com", subject: "Hello", body: "World" }'
+
+  # Create a GitHub issue
+  composio execute GITHUB_CREATE_ISSUE --session-id trs_... -d '{ owner: "acme", repo: "app", title: "Bug report", body: "Steps to reproduce..." }'
+
+  # Preview what a tool call would send without executing
+  composio execute SLACK_SEND_A_MESSAGE_TO_A_SLACK_CHANNEL --session-id trs_... --dry-run -d '{ channel: "general", text: "Hello team" }'
+
+  # Check what inputs a tool needs
+  composio execute GMAIL_SEND_EMAIL --session-id trs_... --get-schema
+
+  # Read arguments from a file
+  composio execute GITHUB_CREATE_ISSUE --session-id trs_... -d @issue.json
+
+  # Read arguments from stdin
+  printf '{"recipient_email":"a@b.com"}' | composio execute GMAIL_SEND_EMAIL --session-id trs_... -d -
+
+  # Execute multiple tools concurrently
+  composio execute -p --session-id trs_... GMAIL_SEND_EMAIL -d '{ recipient_email: "a@b.com" }' GITHUB_CREATE_AN_ISSUE -d '{ owner: "acme", repo: "app", title: "Bug" }'
+
+SEE ALSO
+  composio search "<query>" --session-id trs_...    Find tool slugs by use case"
+`;
+
+exports[`help output > matches proxy help snapshot 1`] = `
+"USAGE
+  composio proxy <url> --toolkit <text> --session-id <session_id> [-X method] [-H header]... [-d data]
+
+DESCRIPTION
+  curl-like access to any toolkit API through Composio using your connected account.
+  Composio handles authentication; just provide the full URL and toolkit.
+  The provided session must already have the relevant connected account.
+
+ARGUMENTS
+  <url>                     Full API endpoint URL
+
+OPTIONS
+  --session-id <session_id> Existing Tool Router session id.
+  -t, --toolkit <text>      Toolkit slug whose connected account should be used
+  -X, --method <method>     HTTP method (GET, POST, PUT, DELETE, PATCH)
+  -H, --header <header>     Header in "Name: value" format. Repeat for multiple.
+  -d, --data <data>         Request body as raw text, JSON, @file, or - for stdin
+  --skip-connection-check   Skip the connected-account check
+
+EXAMPLES
+  composio proxy https://gmail.googleapis.com/gmail/v1/users/me/profile --toolkit gmail --session-id trs_...
+  composio proxy https://gmail.googleapis.com/gmail/v1/users/me/drafts --toolkit gmail --session-id trs_... \\
+    -X POST -H 'content-type: application/json' -d '{"message":{"raw":"..."}}'"
+`;
+
+exports[`help output > matches root help snapshot 1`] = `
+"Composio CLI - operate on existing Tool Router sessions.
+
+USAGE
+  composio <command> [options]
+
+ENVIRONMENT
+  COMPOSIO_API_KEY            Required project API key.
+  COMPOSIO_BASE_URL           Optional API base URL override for development.
+
+SESSION MODEL
+  Every command requires --session-id <session_id>.
+  Sessions are created by your app/backend; this CLI only operates on an existing Tool Router session.
+  The CLI does not create sessions and does not accept user_id.
+
+COMMANDS
+  search    Find tools by use case across all toolkits/apps.
+  execute   Execute a tool by slug inside an existing session.
+  proxy     curl-like access to any toolkit API through Composio using your connected account.
+
+EXAMPLES
+  composio search "send an email" --session-id trs_...
+  composio execute GMAIL_SEND_EMAIL --session-id trs_... -d '{ "recipient_email": "a@b.com" }'
+  composio proxy https://gmail.googleapis.com/gmail/v1/users/me/profile --toolkit gmail --session-id trs_...
+
+HELP
+  composio search --help
+  composio execute --help
+  composio proxy --help"
+`;
+
+exports[`help output > matches search help snapshot 1`] = `
+"USAGE
+  composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer] [--human]
+
+DESCRIPTION
+  Find tools by use case across all toolkits/apps.
+  Defaults to JSON output; use --human for formatted output.
+  Sessions are created by your app/backend; this CLI only operates on an existing Tool Router session.
+
+ARGUMENTS
+  <query...>                 One or more semantic use-case queries (e.g. "send an email", "create github issue")
+
+OPTIONS
+  --session-id <session_id>  Existing Tool Router session id.
+  --toolkits <text>          Filter by toolkit slugs, comma-separated
+  --limit <integer>          Maximum number of results (1-1000)
+  --human                    Show formatted human-readable search output
+
+EXAMPLES
+  # Find tools for a use case
+  composio search "send an email" --session-id trs_...
+  composio search "send an email" "create github issue" --session-id trs_...
+  composio search "my emails" "my github issues" --toolkits gmail,github --session-id trs_...
+  composio search "create issue" --toolkits github --session-id trs_...
+  composio search "send an email" --human --session-id trs_...
+
+  # Cross-app workflow discovery
+  composio search "post a message to a slack channel" --session-id trs_...
+  composio search "add a row to google sheet" --session-id trs_...
+
+  # Narrow results to a specific toolkit
+  composio search "list calendar events" --toolkits google_calendar --limit 5 --session-id trs_...
+
+SEE ALSO
+  composio execute <slug> --session-id trs_... -d '{ ... }'    Run a tool from the results"
+`;
