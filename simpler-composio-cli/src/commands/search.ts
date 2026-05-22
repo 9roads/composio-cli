@@ -7,8 +7,6 @@ import { cacheToolInputDefinition, resolveCacheDir, ToolInputDefinition } from '
 import {
   appendCliSessionHistory,
   buildMinimalPayloadFromSchema,
-  formatToolsTable,
-  OriginalToolTableItem,
 } from '../original-compat.js';
 
 type SearchOptions = {
@@ -16,7 +14,6 @@ type SearchOptions = {
   sessionId?: string;
   toolkits?: string;
   limit: number;
-  human: boolean;
 };
 
 type SearchToolSchema = {
@@ -95,7 +92,6 @@ export const parseSearchArgs = (args: string[]): SearchOptions => {
   const options: SearchOptions = {
     queries: [],
     limit: 10,
-    human: false,
   };
 
   for (let i = 0; i < args.length; i += 1) {
@@ -120,16 +116,6 @@ export const parseSearchArgs = (args: string[]): SearchOptions => {
       const [value, next] = takeOptionValue(args, i, '--limit');
       options.limit = clampLimit(parseIntegerOption(value, '--limit'));
       i = next;
-      continue;
-    }
-
-    if (token === '--human') {
-      options.human = true;
-      continue;
-    }
-
-    if (token === '--json') {
-      options.human = false;
       continue;
     }
 
@@ -302,80 +288,6 @@ const buildSearchJsonPayload = async (params: {
   };
 };
 
-const toToolTableItems = (
-  result: SearchResultRecord,
-  toolSchemas: Record<string, SearchToolSchema>
-): OriginalToolTableItem[] => {
-  const mergedSlugs: string[] = [];
-  const seen = new Set<string>();
-  for (const slug of [...result.primary_tool_slugs, ...result.related_tool_slugs]) {
-    if (seen.has(slug)) continue;
-    seen.add(slug);
-    mergedSlugs.push(slug);
-  }
-
-  return mergedSlugs.flatMap(slug => {
-    const schema = toolSchemas[slug];
-    if (!schema) return [];
-    return [
-      {
-        slug: schema.tool_slug ?? slug,
-        name: schema.tool_slug ?? slug,
-        description: schema.description ?? '',
-        tags: [],
-      },
-    ];
-  });
-};
-
-const formatHuman = (
-  response: SearchResponseRecord,
-  queries: string[],
-  sessionId: string
-): string => {
-  const lines: string[] = [];
-
-  for (const result of response.results) {
-    if (queries.length > 1) {
-      lines.push(`Results for "${result.use_case}"`);
-    }
-
-    const tools = toToolTableItems(result, response.tool_schemas);
-    if (tools.length === 0) {
-      lines.push(`No tools found for "${result.use_case}".`);
-      continue;
-    }
-
-    lines.push(`Found ${tools.length} tools\n\n${formatToolsTable(tools)}`);
-
-    const planSteps = Array.from(new Set(result.recommended_plan_steps ?? []));
-    if (planSteps.length > 0) {
-      lines.push('');
-      lines.push('Plan:');
-      planSteps.forEach((step, index) => lines.push(`${index + 1}. ${step}`));
-    } else if (queries.length === 1 && (response.next_steps_guidance?.length ?? 0) > 0) {
-      lines.push('');
-      lines.push('Plan:');
-      response.next_steps_guidance?.forEach((step, index) => lines.push(`${index + 1}. ${step}`));
-    }
-    lines.push('');
-  }
-
-  const firstSlug = firstSearchToolSlug(response);
-  if (firstSlug) {
-    lines.push('Next steps:');
-    lines.push('1. Make sure the provided session already has the relevant connected account.');
-    lines.push(`2. composio execute ${firstSlug} --session-id ${sessionId} -d '{ ... }'`);
-  }
-
-  if (response.error) {
-    lines.push('');
-    lines.push(`Warning: ${response.error}`);
-  }
-
-  return lines.join('\n').trimEnd();
-};
-
 const performSearch = async (
   config: CliConfig,
   sessionId: string,
@@ -423,11 +335,6 @@ export const runSearch = async (args: string[], io: CliIO, env: Env): Promise<vo
       nextSteps: response.next_steps_guidance ?? [],
     },
   });
-
-  if (options.human) {
-    writeLine(io.stdout, formatHuman(response, options.queries, sessionId));
-    return;
-  }
 
   if (!responseHasTools(response)) {
     writeLine(io.stdout, '[]');

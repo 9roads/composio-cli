@@ -57,12 +57,6 @@ composio search "create issue" --toolkits github --session-id trs_...
 composio search "list calendar events" --toolkits google_calendar --limit 5 --session-id trs_...
 ```
 
-Use human-readable output when inspecting results manually:
-
-```sh
-composio search "send an email" --human --session-id trs_...
-```
-
 Prefer `--limit` and `--toolkits` over shell truncation. Tool ranking and next-step guidance are more useful when the CLI receives and formats the full search response.
 
 ### Step 2 - Execute a Tool
@@ -168,7 +162,7 @@ Treat local tools as live local actions. Peekaboo can control the GUI, Chrome De
 ### `composio search`
 
 ```sh
-composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer] [--human]
+composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer]
 ```
 
 Options:
@@ -177,8 +171,6 @@ Options:
 --session-id <session_id>  Existing Tool Router session id.
 --toolkits <text>          Filter by toolkit slugs, comma-separated.
 --limit <integer>          Maximum number of results, clamped to 1-1000.
---human                    Show formatted human-readable search output.
---json                     Force JSON output.
 ```
 
 Behavior:

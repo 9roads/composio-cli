@@ -15,18 +15,8 @@ export type ApiErrorDetails = {
   suggested_fix?: string;
 };
 
-export type OriginalToolTableItem = {
-  slug: string;
-  name?: string;
-  description?: string;
-  tags?: string[];
-};
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const truncate = (value: string, max: number): string =>
-  value.length <= max ? value : `${value.slice(0, max - 3)}...`;
 
 export const extractMessage = (value: unknown, seen?: Set<unknown>): string | undefined => {
   if (typeof value === 'string') return value;
@@ -485,15 +475,4 @@ export const buildMinimalPayloadFromSchema = (
     result[entry.name] = defaultForSchemaType(entry.type, entry.defaultValue);
   }
   return result;
-};
-
-export const formatToolsTable = (tools: ReadonlyArray<OriginalToolTableItem>): string => {
-  const header = `${'Slug'.padEnd(35)} ${'Name'.padEnd(20)} Description`;
-  const rows = tools.map(tool => {
-    const slug = truncate(tool.slug, 35).padEnd(35);
-    const name = truncate(tool.name ?? tool.slug, 20).padEnd(20);
-    const description = truncate(tool.description ?? '', 50);
-    return `${slug} ${name} ${description}`;
-  });
-  return [header, ...rows].join('\n');
 };

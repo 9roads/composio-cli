@@ -1,11 +1,11 @@
 export const searchHelp = (): string =>
   [
     'USAGE',
-    '  composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer] [--human]',
+    '  composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer]',
     '',
     'DESCRIPTION',
     '  Find tools by use case across all toolkits/apps.',
-    '  Defaults to JSON output; use --human for formatted output.',
+    '  Writes JSON output for agent consumption.',
     '  Sessions are created by your app/backend; this CLI only operates on an existing Tool Router session.',
     '',
     'ARGUMENTS',
@@ -15,7 +15,6 @@ export const searchHelp = (): string =>
     '  --session-id <session_id>  Existing Tool Router session id.',
     '  --toolkits <text>          Filter by toolkit slugs, comma-separated',
     '  --limit <integer>          Maximum number of results (1-1000)',
-    '  --human                    Show formatted human-readable search output',
     '',
     'EXAMPLES',
     '  # Find tools for a use case',
@@ -23,7 +22,6 @@ export const searchHelp = (): string =>
     '  composio search "send an email" "create github issue" --session-id trs_...',
     '  composio search "my emails" "my github issues" --toolkits gmail,github --session-id trs_...',
     '  composio search "create issue" --toolkits github --session-id trs_...',
-    '  composio search "send an email" --human --session-id trs_...',
     '',
     '  # Cross-app workflow discovery',
     '  composio search "post a message to a slack channel" --session-id trs_...',
@@ -35,4 +33,3 @@ export const searchHelp = (): string =>
     'SEE ALSO',
     '  composio execute <slug> --session-id trs_... -d \'{ ... }\'    Run a tool from the results',
   ].join('\n');
-

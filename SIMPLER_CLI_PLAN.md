@@ -86,7 +86,7 @@ Purpose: find relevant tools by natural language.
 Usage:
 
 ```bash
-composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer] [--human]
+composio search <query...> --session-id <session_id> [--toolkits text] [--limit integer]
 ```
 
 Behavior:
@@ -94,8 +94,7 @@ Behavior:
 - Send one or more semantic search queries to the session search endpoint.
 - Support `--toolkits` as a comma-separated toolkit filter.
 - Support `--limit` for output truncation if the backend returns more results.
-- Return JSON by default.
-- Support `--human` for formatted output, matching the original CLI behavior.
+- Return JSON.
 
 ### `composio execute`
 
@@ -195,7 +194,6 @@ Keep relevant text:
 - "One or more semantic use-case queries."
 - `--toolkits`
 - `--limit`
-- `--human`
 - Cross-app workflow discovery examples.
 - Narrow-to-toolkit examples.
 

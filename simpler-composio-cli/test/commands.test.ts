@@ -140,32 +140,9 @@ describe('commands', () => {
     expect(cached.inputSchema).toEqual(schema);
   });
 
-  it('search --human uses the original table shape with session-scoped next steps', async () => {
+  it('search rejects the removed --human output option', async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'simpler-cli-'));
     const io = createTestIO();
-    mockFetch(() =>
-      jsonResponse({
-        results: [
-          {
-            use_case: 'send an email',
-            primary_tool_slugs: ['GMAIL_SEND_EMAIL'],
-            related_tool_slugs: [],
-            recommended_plan_steps: [],
-          },
-        ],
-        toolkit_connection_statuses: [{ toolkit: 'gmail', has_active_connection: true }],
-        tool_schemas: {
-          GMAIL_SEND_EMAIL: {
-            tool_slug: 'GMAIL_SEND_EMAIL',
-            toolkit: 'gmail',
-            description: 'Send an email',
-            input_schema: {},
-          },
-        },
-        next_steps_guidance: ['Choose the Gmail send email tool.'],
-        error: null,
-      })
-    );
 
     const code = await runCli(
       ['search', 'send an email', '--session-id', 'trs_123', '--human'],
@@ -173,15 +150,8 @@ describe('commands', () => {
       baseEnv(home)
     );
 
-    expect(code).toBe(0);
-    const output = io.stdoutText();
-    expect(output).toContain('Found 1 tools');
-    expect(output).toContain('Slug');
-    expect(output).toContain('Name');
-    expect(output).toContain('Description');
-    expect(output).toContain('GMAIL_SEND_EMAIL');
-    expect(output).toContain('Plan:\n1. Choose the Gmail send email tool.');
-    expect(output).toContain('composio execute GMAIL_SEND_EMAIL --session-id trs_123');
+    expect(code).toBe(1);
+    expect(io.stderrText()).toContain('Unknown option for search: --human');
   });
 
   it('execute calls the session execute endpoint with x-api-key', async () => {
@@ -882,7 +852,7 @@ describe('commands', () => {
     });
 
     const searchCode = await runCli(
-      ['search', 'add slackbot reaction', '--session-id', 'trs_123', '--human'],
+      ['search', 'add slackbot reaction', '--session-id', 'trs_123'],
       createTestIO(),
       baseEnv(home)
     );
@@ -901,7 +871,7 @@ describe('commands', () => {
     expect(output.inputSchema).toEqual(schema);
   });
 
-  it('execute uses schemas cached from human search instead of requiring /tools to contain the slug', async () => {
+  it('execute uses schemas cached from search instead of requiring /tools to contain the slug', async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'simpler-cli-'));
     const schema = {
       type: 'object',
@@ -940,7 +910,7 @@ describe('commands', () => {
     });
 
     const searchCode = await runCli(
-      ['search', 'add slackbot reaction', '--session-id', 'trs_123', '--human'],
+      ['search', 'add slackbot reaction', '--session-id', 'trs_123'],
       createTestIO(),
       baseEnv(home)
     );
