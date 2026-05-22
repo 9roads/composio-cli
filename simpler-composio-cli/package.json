@@ -1,6 +1,6 @@
 {
   "name": "loisa-composio-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Small Composio CLI for existing Tool Router sessions.",
   "repository": {
     "type": "git",

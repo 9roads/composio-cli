@@ -225,6 +225,9 @@ describe('commands', () => {
           next_cursor: null,
         });
       }
+      if (url.endsWith('/execute_meta')) {
+        return jsonResponse({ data: { success: false, tool_schemas: {} }, error: null });
+      }
       if (url.endsWith('/execute')) {
         return jsonResponse({ data: null, error: 'Input validation failed', log_id: 'log_1' });
       }
@@ -248,6 +251,7 @@ describe('commands', () => {
     expect(code).toBe(1);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       'https://backend.test/api/v3.1/tool_router/session/trs_123/tools?limit=500',
+      'https://backend.test/api/v3.1/tool_router/session/trs_123/execute_meta',
       'https://backend.test/api/v3.1/tool_router/session/trs_123/execute',
     ]);
     expect(JSON.parse(io.stdoutText())).toEqual({
@@ -768,6 +772,72 @@ describe('commands', () => {
     const output = JSON.parse(io.stdoutText());
     expect(output.slug).toBe('GMAIL_SEND_EMAIL');
     expect(output.inputSchema.properties.attachment.format).toBe('path');
+  });
+
+  it('execute --get-schema uses COMPOSIO_GET_TOOL_SCHEMAS when /tools only lists meta tools', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'simpler-cli-'));
+    const io = createTestIO();
+    const schema = {
+      type: 'object',
+      properties: { channel: { type: 'string' }, timestamp: { type: 'string' }, name: { type: 'string' } },
+      required: ['channel', 'timestamp', 'name'],
+    };
+    const fetchMock = mockFetch((input, init) => {
+      const url = String(input);
+      if (url.includes('/tools')) {
+        return jsonResponse({
+          items: [{ slug: 'COMPOSIO_SEARCH_TOOLS', toolkit: { slug: 'composio' }, input_parameters: {} }],
+          next_cursor: null,
+        });
+      }
+      if (url.endsWith('/execute_meta')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          slug: 'COMPOSIO_GET_TOOL_SCHEMAS',
+          arguments: {
+            tool_slugs: ['SLACKBOT_ADD_REACTION_TO_AN_ITEM'],
+            include: ['input_schema'],
+            session_id: 'trs_123',
+          },
+        });
+        return jsonResponse({
+          data: {
+            success: true,
+            tool_schemas: {
+              SLACKBOT_ADD_REACTION_TO_AN_ITEM: {
+                toolkit: 'SLACKBOT',
+                tool_slug: 'SLACKBOT_ADD_REACTION_TO_AN_ITEM',
+                description: 'Add a reaction',
+                input_schema: schema,
+              },
+            },
+          },
+          error: null,
+          log_id: 'log_1',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const code = await runCli(
+      ['execute', 'SLACKBOT_ADD_REACTION_TO_AN_ITEM', '--session-id', 'trs_123', '--get-schema'],
+      io,
+      baseEnv(home)
+    );
+
+    expect(code).toBe(0);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://backend.test/api/v3.1/tool_router/session/trs_123/tools?limit=500',
+      'https://backend.test/api/v3.1/tool_router/session/trs_123/execute_meta',
+    ]);
+    const output = JSON.parse(io.stdoutText());
+    expect(output.inputSchema).toEqual(schema);
+    const cached = JSON.parse(
+      await readFile(
+        path.join(home, '.composio', 'tool_definitions', 'SLACKBOT_ADD_REACTION_TO_AN_ITEM.json'),
+        'utf8'
+      )
+    );
+    expect(cached.inputSchema).toEqual(schema);
   });
 
   it('execute --get-schema uses schemas cached from search when /tools does not list the slug', async () => {

@@ -221,7 +221,7 @@ Behavior:
 6. Uploads file inputs when the tool schema marks fields as `file_uploadable`.
 7. Stores very large successful outputs in an artifact file and prints a JSON summary with `storedInFile`.
 
-Normal `execute` uses a cached schema when available and only fetches a schema when the cache is missing. If a schema lookup is unavailable for a normal execution, the CLI still sends the execute request and lets the backend validate the payload. Schema-dependent modes such as `--get-schema`, `--dry-run`, and `--file` require a schema.
+Normal `execute` uses a cached schema when available and only fetches a schema when the cache is missing. When `/tools` does not list the requested slug, schema lookup falls back to `COMPOSIO_GET_TOOL_SCHEMAS` and caches the result. If schema lookup is still unavailable for a normal execution, the CLI sends the execute request and lets the backend validate the payload. Schema-dependent modes such as `--get-schema`, `--dry-run`, and `--file` require a schema.
 
 ### `composio proxy`
 

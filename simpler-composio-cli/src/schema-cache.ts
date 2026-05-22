@@ -130,24 +130,31 @@ export const getCachedToolInputDefinition = async (
   }
 };
 
+type ToolSchemaRecord = {
+  slug?: string;
+  tool_slug?: string;
+  toolkit?: { slug?: string } | string;
+  input_parameters?: Record<string, unknown>;
+  input_schema?: Record<string, unknown>;
+  available_versions?: string[];
+  version?: string;
+  no_auth?: boolean;
+};
+
 type SessionToolsResponse = {
-  items?: Array<{
-    slug?: string;
-    tool_slug?: string;
-    toolkit?: { slug?: string } | string;
-    input_parameters?: Record<string, unknown>;
-    input_schema?: Record<string, unknown>;
-    available_versions?: string[];
-    version?: string;
-    no_auth?: boolean;
-  }>;
+  items?: ToolSchemaRecord[];
   next_cursor?: string | null;
+};
+
+type GetToolSchemasMetaResponse = {
+  data?: unknown;
+  error?: unknown;
 };
 
 const extractToolDefinition = (
   env: Env,
   slug: string,
-  item: NonNullable<SessionToolsResponse['items']>[number]
+  item: ToolSchemaRecord
 ): ToolInputDefinition => {
   const inputSchema = item.input_schema ?? item.input_parameters ?? {};
   const toolkit =
@@ -165,6 +172,31 @@ const extractToolDefinition = (
     toolkit,
     noAuth: item.no_auth,
   };
+};
+
+const asToolSchemasRecord = (value: unknown): Record<string, ToolSchemaRecord> | null => {
+  if (!isRecord(value)) return null;
+  return isRecord(value.tool_schemas)
+    ? (value.tool_schemas as Record<string, ToolSchemaRecord>)
+    : null;
+};
+
+const getToolSchemasFromMetaResponse = (
+  response: GetToolSchemasMetaResponse
+): Record<string, ToolSchemaRecord> | null =>
+  asToolSchemasRecord(response) ?? asToolSchemasRecord(response.data);
+
+const getResponseErrorMessage = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.trim()) return value;
+  if (value instanceof Error) return value.message;
+  if (isRecord(value) && 'error' in value) return getResponseErrorMessage(value.error);
+  if (value === null || value === undefined || value === false || value === '') return undefined;
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 };
 
 const normalizeObjectSchema = (schema: Record<string, unknown>): JsonSchema => {
@@ -216,7 +248,47 @@ const fetchToolInputDefinition = async (
     cursor = response.next_cursor ?? undefined;
   } while (cursor);
 
-  throw new CliError(`Tool "${slug}" was not found in session ${sessionId}.`);
+  try {
+    const response = await apiRequest<GetToolSchemasMetaResponse>(config, {
+      method: 'POST',
+      path: `/api/v3.1/tool_router/session/${encodeURIComponent(sessionId)}/execute_meta`,
+      body: {
+        slug: 'COMPOSIO_GET_TOOL_SCHEMAS',
+        arguments: {
+          tool_slugs: [slug],
+          include: ['input_schema'],
+          session_id: sessionId,
+        },
+      },
+    });
+
+    const schemas = getToolSchemasFromMetaResponse(response);
+    const match = schemas
+      ? Object.entries(schemas).find(
+          ([key, item]) => key === slug || item.slug === slug || item.tool_slug === slug
+        )
+      : undefined;
+
+    if (match) {
+      const [, item] = match;
+      const definition = extractToolDefinition(env, slug, item);
+      return writeDefinition(env, slug, definition);
+    }
+
+    const metaError =
+      getResponseErrorMessage(response.error) ??
+      (isRecord(response.data) ? getResponseErrorMessage(response.data.error) : undefined);
+    throw new CliError(
+      metaError
+        ? `COMPOSIO_GET_TOOL_SCHEMAS did not return ${slug}: ${metaError}`
+        : `COMPOSIO_GET_TOOL_SCHEMAS did not return ${slug}.`
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliError(
+      `Tool "${slug}" was not found in session ${sessionId}. Schema lookup via COMPOSIO_GET_TOOL_SCHEMAS also failed: ${message}`
+    );
+  }
 };
 
 export const getOrFetchToolInputDefinition = async (
